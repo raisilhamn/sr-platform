@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import Spinner from "./spinner";
 
 type Card = {
   id: string;
@@ -99,8 +100,8 @@ function StudyPageContent() {
 
   if (!cards || !stats) {
     return (
-      <div className="text-muted text-sm">
-        {importing ? "Importing..." : <span className="animate-pulse">Loading</span>}
+      <div className="flex justify-center py-20">
+        <Spinner className="w-6 h-6 text-muted" />
       </div>
     );
   }
@@ -182,7 +183,7 @@ function StudyPageContent() {
 
 export default function StudyPage() {
   return (
-    <Suspense fallback={<div className="text-muted text-sm">Loading...</div>}>
+    <Suspense fallback={<div className="text-muted text-sm"><Spinner /></div>}>
       <StudyPageContent />
     </Suspense>
   );

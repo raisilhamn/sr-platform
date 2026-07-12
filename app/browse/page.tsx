@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import Spinner from "../spinner";
 
 type Section = { title: string; content: string };
 type Topic = { topic: string; label: string; sections: Section[] };
@@ -31,7 +32,7 @@ export default function BrowsePage() {
   }
 
   if (!topics) {
-    return <div className="text-muted text-sm">Loading...</div>;
+    return <div className="flex justify-center py-20"><Spinner className="w-6 h-6 text-muted" /></div>;
   }
 
   return (

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Spinner from "./spinner";
 
 type StreakData = {
   daily: Record<string, number>;
@@ -25,7 +26,7 @@ export default function StreakGraph() {
       .then(setData);
   }, []);
 
-  if (!data) return <div className="text-xs text-muted">Loading...</div>;
+  if (!data) return <div className="text-xs text-muted flex items-center gap-2"><span>Stats</span> <Spinner /></div>;
 
   const today = new Date();
   const days: { date: string; count: number; month: number; day: number }[] = [];
