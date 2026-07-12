@@ -75,23 +75,32 @@ async function main() {
     reviewed_at TEXT DEFAULT (datetime('now'))
   )`);
 
-  const existing = new Set(
-    (await db.execute('SELECT id FROM cards')).rows.map((r) => r.id)
+  const existing = new Map(
+    (await db.execute('SELECT id, content FROM cards')).rows.map((r) => [r.id, r.content])
   );
 
   const all = TOPICS.flatMap((t) =>
     parseCards(fs.readFileSync(path.join(CONTENT_DIR, `${t}.md`), 'utf-8'), t)
   );
   const toInsert = all.filter((c) => !existing.has(c.id));
+  const toUpdate = all.filter((c) => existing.has(c.id) && existing.get(c.id) !== c.content);
 
   console.log(`Total cards: ${all.length}`);
   console.log(`Already in DB: ${existing.size}`);
   console.log(`To insert: ${toInsert.length}`);
+  console.log(`To update: ${toUpdate.length}`);
 
   for (const c of toInsert) {
     await db.execute({
       sql: 'INSERT INTO cards (id, topic, title, content) VALUES (?, ?, ?, ?)',
       args: [c.id, c.topic, c.title, c.content],
+    });
+  }
+
+  for (const c of toUpdate) {
+    await db.execute({
+      sql: 'UPDATE cards SET topic=?, title=?, content=? WHERE id=?',
+      args: [c.topic, c.title, c.content, c.id],
     });
   }
 

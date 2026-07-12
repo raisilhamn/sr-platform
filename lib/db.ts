@@ -63,15 +63,29 @@ async function syncCards(db: Client) {
   const raw = readTopicMarkdown();
   const all = Object.entries(raw).flatMap(([topic, md]) => parseCards(md, topic));
 
-  const existingRows = await db.execute('SELECT id FROM cards');
-  const existing = new Set(existingRows.rows.map((r) => r.id as string));
+  const existingRows = await db.execute('SELECT id, content FROM cards');
+  const existing = new Map(existingRows.rows.map((r) => [r.id as string, r.content as string]));
 
-  const toInsert = all.filter((c) => !existing.has(c.id));
-  for (const c of toInsert) {
-    await db.execute({
-      sql: 'INSERT OR IGNORE INTO cards (id, topic, title, content) VALUES (?, ?, ?, ?)',
-      args: [c.id, c.topic, c.title, c.content],
-    });
+  let changed = 0;
+  for (const c of all) {
+    const oldContent = existing.get(c.id);
+    if (oldContent === undefined) {
+      await db.execute({
+        sql: 'INSERT INTO cards (id, topic, title, content) VALUES (?, ?, ?, ?)',
+        args: [c.id, c.topic, c.title, c.content],
+      });
+      changed++;
+    } else if (oldContent !== c.content) {
+      await db.execute({
+        sql: 'UPDATE cards SET topic=?, title=?, content=? WHERE id=?',
+        args: [c.topic, c.title, c.content, c.id],
+      });
+      changed++;
+    }
+  }
+
+  if (changed > 0) {
+    console.log(`syncCards: ${changed} cards added/updated`);
   }
 }
 
