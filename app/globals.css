@@ -1,26 +1,110 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #000000;
+  --surface: #0a0a0a;
+  --border: #262626;
+  --foreground: #ffffff;
+  --muted: #a3a3a3;
 }
 
 @theme inline {
   --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-border: var(--border);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-muted: var(--muted);
+  --font-sans: var(--font-inter);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  background: var(--background);
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.animate-pulse {
+  animation: pulse 1.5s ease-in-out infinite;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), system-ui, sans-serif;
+  font-feature-settings: "cv11", "ss01";
+}
+
+.prose-card {
+  font-size: 1rem;
+  line-height: 1.85;
+  letter-spacing: 0.005em;
+}
+
+.prose-card table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 16px 0;
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.prose-card th,
+.prose-card td {
+  border: 1px solid var(--border);
+  padding: 10px 14px;
+  text-align: left;
+}
+
+.prose-card th {
+  background: rgba(255, 255, 255, 0.06);
+  font-weight: 600;
+}
+
+.prose-card blockquote {
+  border-left: 3px solid var(--foreground);
+  padding: 10px 18px;
+  margin: 16px 0;
+  color: var(--muted);
+}
+
+.prose-card ul,
+.prose-card ol {
+  padding-left: 26px;
+  margin: 12px 0;
+}
+
+.prose-card li {
+  margin: 6px 0;
+}
+
+.prose-card li ul,
+.prose-card li ol {
+  margin-top: 8px;
+  margin-left: 0;
+  padding-left: 22px;
+  border-left: 2px solid rgba(255, 255, 255, 0.12);
+}
+
+.prose-card h3 {
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin: 22px 0 10px;
+}
+
+.prose-card hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 20px 0;
+}
+
+.prose-card strong {
+  color: var(--foreground);
+  font-weight: 600;
+}
+
+.prose-card p {
+  margin: 12px 0;
 }

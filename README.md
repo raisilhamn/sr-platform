@@ -1,36 +1,52 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# SR App — CPNS Spaced Repetition
+
+Spaced repetition study app for CPNS (Indonesian Civil Service) exam materials.
 
 ## Getting Started
 
-First, run the development server:
-
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Database
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Defaults to a local SQLite file (`local.db`). To use a remote Turso database:
 
-## Learn More
+1. Copy `.env.example` to `.env.local`
+2. Set your Turso credentials:
 
-To learn more about Next.js, take a look at the following resources:
+```
+TURSO_DATABASE_URL=libsql://your-db.turso.io
+TURSO_AUTH_TOKEN=your_token
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Seed
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+After setting up the database, run:
 
-## Deploy on Vercel
+```bash
+npm run seed
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+This reads markdown files from `content/` and inserts cards into the database.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Content
+
+Study materials are in `content/` as markdown files:
+
+- `1945.md` — Pembukaan UUD 1945
+- `belanegara.md` — Bela Negara
+- `pancasila.md` — Pancasila
+- `ringkasan.md` — Lembaga Pemerintahan
+- `sejarah.md` — Sejarah Kebangsaan
+- `tokoh.md` — Tokoh-Tokoh Penting
+
+## Tech
+
+- [Next.js](https://nextjs.org) (App Router)
+- [Tailwind CSS](https://tailwindcss.com) v4
+- [Turso/libSQL](https://turso.tech) / SQLite
+- [react-markdown](https://github.com/remarkjs/react-markdown)

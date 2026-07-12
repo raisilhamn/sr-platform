@@ -1,65 +1,189 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { useEffect, useState, useCallback, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+
+type Card = {
+  id: string;
+  topic: string;
+  title: string;
+  content: string;
+  ef: number;
+  interval: number;
+  reps: number;
+};
+
+type Stats = { due: number; newC: number; reviewed: number; total: number };
+
+const RATINGS = [
+  { value: 1, label: "Again", sub: "1 hari" },
+  { value: 2, label: "Hard", sub: "Reset" },
+  { value: 3, label: "Good", sub: "Normal" },
+  { value: 4, label: "Easy", sub: "Cepat" },
+];
+
+function StudyPageContent() {
+  const searchParams = useSearchParams();
+  const [cards, setCards] = useState<Card[] | null>(null);
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [importing, setImporting] = useState(false);
+
+  const load = useCallback(async () => {
+    const res = await fetch("/api/study");
+    const data = await res.json();
+    setCards(data.cards);
+    setStats(data.stats);
+  }, []);
+
+  useEffect(() => {
+    const importId = searchParams.get("import");
+    if (importId && !importing) {
+      setImporting(true);
+      (async () => {
+        try {
+          const res = await fetch("/api/session/export", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ sessionId: importId }),
+          });
+          const data = await res.json();
+          if (data.cards) {
+            await fetch("/api/session/import", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ sessionId: importId, cards: data.cards }),
+            });
+            localStorage.setItem("cpns_sr_session", importId);
+            window.history.replaceState({}, "", "/");
+            await load();
+          }
+        } catch (e) {
+          console.error("Import failed:", e);
+        }
+        setImporting(false);
+      })();
+    } else {
+      load();
+    }
+  }, [load, searchParams, importing]);
+
+  const [ratingId, setRatingId] = useState<string | null>(null);
+
+  async function rate(id: string, rating: number) {
+    setRatingId(id);
+    await fetch("/api/review", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, rating }),
+    });
+    setRatingId(null);
+    load();
+  }
+
+  async function reset(id: string) {
+    await fetch("/api/reset", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+    load();
+  }
+
+  async function resetAll() {
+    if (!window.confirm("Reset semua kartu? Semua progres akan hilang.")) return;
+    await fetch("/api/reset-all", { method: "POST" });
+    load();
+  }
+
+  if (!cards || !stats) {
+    return (
+      <div className="text-muted text-sm">
+        {importing ? "Importing..." : <span className="animate-pulse">Loading</span>}
+      </div>
+    );
+  }
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+    <div>
+      <div className="flex gap-4 text-xs text-muted mb-6 flex-wrap">
+        <div>
+          Due: <span className="font-semibold text-foreground">{stats.due}</span>
+        </div>
+        <div>
+          New: <span className="font-semibold text-foreground">{stats.newC}</span>
+        </div>
+        <div>
+          Reviewed: <span className="font-semibold text-foreground">{stats.reviewed}</span>
+        </div>
+        <div>
+          Total: <span className="font-semibold text-foreground">{stats.total}</span>
+        </div>
+      </div>
+
+      {cards.length === 0 ? (
+        <div className="text-center py-20 text-muted">
+          <h2 className="text-xl font-bold text-foreground mb-2">
+            Semua selesai untuk hari ini!
+          </h2>
+          <p className="mb-6">
+            Tidak ada kartu yang perlu direview. Kembali besok atau reset kartu untuk mengulang.
           </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+          <button
+            onClick={resetAll}
+            className="px-3 py-1.5 text-xs border border-border rounded text-muted hover:border-foreground hover:text-foreground"
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+            Reset Semua
+          </button>
         </div>
-      </main>
+      ) : (
+        cards.map((c) => (
+          <div key={c.id} className="border border-border rounded-lg p-6 mb-5 bg-surface">
+            <div className="flex justify-between items-start gap-3 mb-4">
+              <div>
+                <div className="text-xs uppercase tracking-wide text-muted font-semibold">
+                  {c.topic}
+                </div>
+                <div className="text-lg font-bold">{c.title}</div>
+                <div className="text-xs text-muted mt-1">
+                  EF: {c.ef.toFixed(1)} | Interval: {c.interval}d | Rep: {c.reps}
+                </div>
+              </div>
+              <button
+                onClick={() => reset(c.id)}
+                className="px-2.5 py-1 text-xs border border-border rounded text-muted hover:border-foreground hover:text-foreground shrink-0"
+              >
+                Reset
+              </button>
+            </div>
+            <div className="prose-card border-t border-border pt-5">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{c.content}</ReactMarkdown>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-5">
+              {RATINGS.map((r) => (
+                <button
+                  key={r.value}
+                  onClick={() => rate(c.id, r.value)}
+                  disabled={ratingId === c.id}
+                  className="border border-border rounded py-3 px-2 text-center hover:border-foreground transition-colors disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.97]"
+                >
+                  <div className="text-sm font-bold">{r.label}</div>
+                  <div className="text-xs text-muted">{r.sub}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+        ))
+      )}
     </div>
+  );
+}
+
+export default function StudyPage() {
+  return (
+    <Suspense fallback={<div className="text-muted text-sm">Loading...</div>}>
+      <StudyPageContent />
+    </Suspense>
   );
 }
