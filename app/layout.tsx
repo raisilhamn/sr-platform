@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import Nav from "./nav";
+import LoadingBar from "./loading-bar";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -39,6 +40,7 @@ export default function RootLayout({
         />
       </head>
       <body className="min-h-full flex flex-col bg-background text-foreground">
+        <LoadingBar />
         <Nav />
         <main className="flex-1 w-full max-w-2xl mx-auto px-4 py-6">
           {children}
