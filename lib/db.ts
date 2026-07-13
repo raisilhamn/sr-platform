@@ -268,6 +268,38 @@ export async function getStreakData() {
   return { daily, streak, total, maxCount };
 }
 
+export async function getMatureCards(page: number, limit: number) {
+  const db = await ensureReady();
+  const offset = (page - 1) * limit;
+
+  const [countRes, cardsRes] = await Promise.all([
+    db.execute('SELECT COUNT(*) as c FROM cards WHERE reps >= 2 AND interval > 7'),
+    db.execute({
+      sql: `SELECT c.id, c.topic, c.title, c.content, c.ef, c.interval, c.reps,
+        (SELECT COUNT(*) FROM review_log WHERE card_id = c.id) as review_count
+        FROM cards c
+        WHERE reps >= 2 AND interval > 7
+        ORDER BY c.interval DESC
+        LIMIT ? OFFSET ?`,
+      args: [limit, offset],
+    }),
+  ]);
+
+  return {
+    cards: cardsRes.rows.map((r) => ({
+      id: r.id as string,
+      topic: r.topic as string,
+      title: r.title as string,
+      content: r.content as string,
+      ef: r.ef as number,
+      interval: r.interval as number,
+      reps: r.reps as number,
+      reviewCount: r.review_count as number,
+    })),
+    total: countRes.rows[0].c as number,
+  };
+}
+
 export async function getCardDistribution() {
   const db = await ensureReady();
 
