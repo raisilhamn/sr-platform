@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, Suspense } from "react";
+import { useEffect, useState, useCallback, Suspense, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -69,6 +69,19 @@ function StudyPageContent() {
       load();
     }
   }, [load, searchParams, importing]);
+
+  const dayRef = useRef(new Date().toISOString().slice(0, 10));
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      const now = new Date().toISOString().slice(0, 10);
+      if (now !== dayRef.current) {
+        dayRef.current = now;
+        load();
+      }
+    }, 30_000);
+    return () => clearInterval(id);
+  }, [load]);
 
   const [ratingId, setRatingId] = useState<string | null>(null);
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import Spinner from "./spinner";
 
 type StreakData = {
@@ -24,6 +24,20 @@ export default function StreakGraph() {
     fetch("/api/stats")
       .then((r) => r.json())
       .then(setData);
+  }, []);
+
+  const dayRef = useRef(new Date().toISOString().slice(0, 10));
+  useEffect(() => {
+    const id = setInterval(() => {
+      const now = new Date().toISOString().slice(0, 10);
+      if (now !== dayRef.current) {
+        dayRef.current = now;
+        fetch("/api/stats")
+          .then((r) => r.json())
+          .then(setData);
+      }
+    }, 30_000);
+    return () => clearInterval(id);
   }, []);
 
   if (!data) return <div className="text-xs text-muted flex items-center gap-2"><span>Stats</span> <Spinner /></div>;
