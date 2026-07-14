@@ -5,6 +5,7 @@ import { parseCards } from './parse';
 
 const CONTENT_DIR = path.join(process.cwd(), 'content');
 const TOPICS = ['1945', 'belanegara', 'pancasila', 'ringkasan', 'sejarah', 'tokoh'];
+const LEGACY_CARD_COLUMNS = ['ef', 'interval', 'reps', 'next_review', 'last_review', 'session_id'];
 
 let client: Client | null = null;
 let readyPromise: Promise<void> | null = null;
@@ -27,19 +28,31 @@ function readTopicMarkdown(): Record<string, string> {
   return raw;
 }
 
+async function migrateLegacySchema(db: Client) {
+  const cardsInfo = await db.execute('PRAGMA table_info(cards)');
+  const cardColumns = new Set(cardsInfo.rows.map((r) => r.name as string));
+  if (cardColumns.has('ef')) {
+    for (const col of LEGACY_CARD_COLUMNS) {
+      if (cardColumns.has(col)) {
+        await db.execute(`ALTER TABLE cards DROP COLUMN ${col}`);
+      }
+    }
+  }
+
+  const logInfo = await db.execute('PRAGMA table_info(review_log)');
+  const logColumns = new Set(logInfo.rows.map((r) => r.name as string));
+  if (logColumns.size > 0 && !logColumns.has('session_id')) {
+    await db.execute('ALTER TABLE review_log ADD COLUMN session_id TEXT');
+  }
+}
+
 async function ensureReady(): Promise<Client> {
   const db = getClient();
   if (!readyPromise) {
     readyPromise = (async () => {
       await db.execute(`CREATE TABLE IF NOT EXISTS cards (
         id TEXT PRIMARY KEY,
-        topic TEXT, title TEXT, content TEXT,
-        ef REAL DEFAULT 2.5,
-        interval INTEGER DEFAULT 0,
-        reps INTEGER DEFAULT 0,
-        next_review TEXT DEFAULT '1970-01-01',
-        last_review TEXT DEFAULT '',
-        session_id TEXT
+        topic TEXT, title TEXT, content TEXT
       )`);
       await db.execute(`CREATE TABLE IF NOT EXISTS sessions (
         id TEXT PRIMARY KEY,
@@ -50,8 +63,26 @@ async function ensureReady(): Promise<Client> {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         card_id TEXT,
         rating INTEGER,
-        reviewed_at TEXT DEFAULT (datetime('now'))
+        reviewed_at TEXT DEFAULT (datetime('now')),
+        session_id TEXT
       )`);
+      await migrateLegacySchema(db);
+      await db.execute(`CREATE TABLE IF NOT EXISTS card_progress (
+        session_id TEXT,
+        card_id TEXT,
+        ef REAL DEFAULT 2.5,
+        interval INTEGER DEFAULT 0,
+        reps INTEGER DEFAULT 0,
+        next_review TEXT DEFAULT '1970-01-01',
+        last_review TEXT DEFAULT '',
+        PRIMARY KEY (session_id, card_id)
+      )`);
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_card_progress_session_next ON card_progress(session_id, next_review)'
+      );
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_review_log_session_date ON review_log(session_id, reviewed_at)'
+      );
       await syncCards(db);
     })();
   }
@@ -93,13 +124,17 @@ export function loadTopics(): Record<string, string> {
   return readTopicMarkdown();
 }
 
-export async function getDueCards() {
+export async function getDueCards(sessionId: string) {
   const db = await ensureReady();
   const today = new Date().toISOString().slice(0, 10);
   const res = await db.execute({
-    sql: `SELECT id, topic, title, content, ef, interval, reps
-      FROM cards WHERE next_review <= ? ORDER BY next_review ASC LIMIT 20`,
-    args: [today],
+    sql: `SELECT c.id, c.topic, c.title, c.content,
+      COALESCE(p.ef, 2.5) as ef, COALESCE(p.interval, 0) as interval, COALESCE(p.reps, 0) as reps
+      FROM cards c
+      LEFT JOIN card_progress p ON p.card_id = c.id AND p.session_id = ?
+      WHERE COALESCE(p.next_review, '1970-01-01') <= ?
+      ORDER BY COALESCE(p.next_review, '1970-01-01') ASC LIMIT 20`,
+    args: [sessionId, today],
   });
   return res.rows.map((r) => ({
     id: r.id as string,
@@ -112,13 +147,26 @@ export async function getDueCards() {
   }));
 }
 
-export async function getStats() {
+export async function getStats(sessionId: string) {
   const db = await ensureReady();
   const today = new Date().toISOString().slice(0, 10);
   const [due, newC, rev, total] = await Promise.all([
-    db.execute({ sql: 'SELECT COUNT(*) as c FROM cards WHERE next_review <= ?', args: [today] }),
-    db.execute('SELECT COUNT(*) as c FROM cards WHERE reps = 0'),
-    db.execute({ sql: 'SELECT COUNT(*) as c FROM cards WHERE last_review = ?', args: [today] }),
+    db.execute({
+      sql: `SELECT COUNT(*) as c FROM cards c
+        LEFT JOIN card_progress p ON p.card_id = c.id AND p.session_id = ?
+        WHERE COALESCE(p.next_review, '1970-01-01') <= ?`,
+      args: [sessionId, today],
+    }),
+    db.execute({
+      sql: `SELECT COUNT(*) as c FROM cards c
+        LEFT JOIN card_progress p ON p.card_id = c.id AND p.session_id = ?
+        WHERE COALESCE(p.reps, 0) = 0`,
+      args: [sessionId],
+    }),
+    db.execute({
+      sql: 'SELECT COUNT(*) as c FROM card_progress WHERE session_id = ? AND last_review = ?',
+      args: [sessionId, today],
+    }),
     db.execute('SELECT COUNT(*) as c FROM cards'),
   ]);
   return {
@@ -132,44 +180,57 @@ export async function getStats() {
 // UI exposes a 1-4 rating scale, but sm2() expects the classic 0-5 SM-2 quality scale.
 const RATING_TO_QUALITY: Record<number, number> = { 1: 1, 2: 3, 3: 4, 4: 5 };
 
-export async function reviewCard(cardId: string, rating: number) {
+export async function reviewCard(sessionId: string, cardId: string, rating: number) {
   const db = await ensureReady();
   const { sm2 } = await import('./sm2');
+  const now = new Date().toISOString();
+
   const res = await db.execute({
-    sql: 'SELECT ef, interval, reps FROM cards WHERE id = ?',
-    args: [cardId],
+    sql: 'SELECT ef, interval, reps FROM card_progress WHERE session_id = ? AND card_id = ?',
+    args: [sessionId, cardId],
   });
-  if (!res.rows.length) return;
-  const row = res.rows[0];
+  const row = res.rows[0] ?? { ef: 2.5, interval: 0, reps: 0 };
+
   const quality = RATING_TO_QUALITY[rating] ?? rating;
   const r = sm2(row.ef as number, row.interval as number, row.reps as number, quality);
   const today = new Date().toISOString().slice(0, 10);
   const next = new Date();
   next.setDate(next.getDate() + r.interval);
   const nextStr = next.toISOString().slice(0, 10);
+
   await db.execute({
-    sql: 'UPDATE cards SET ef=?, interval=?, reps=?, next_review=?, last_review=? WHERE id=?',
-    args: [r.ef, r.interval, r.reps, nextStr, today, cardId],
+    sql: `INSERT INTO card_progress (session_id, card_id, ef, interval, reps, next_review, last_review)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(session_id, card_id) DO UPDATE SET
+        ef=excluded.ef, interval=excluded.interval, reps=excluded.reps,
+        next_review=excluded.next_review, last_review=excluded.last_review`,
+    args: [sessionId, cardId, r.ef, r.interval, r.reps, nextStr, today],
   });
   await db.execute({
-    sql: 'INSERT INTO review_log (card_id, rating, reviewed_at) VALUES (?, ?, ?)',
-    args: [cardId, rating, new Date().toISOString()],
+    sql: 'INSERT INTO review_log (session_id, card_id, rating, reviewed_at) VALUES (?, ?, ?, ?)',
+    args: [sessionId, cardId, rating, now],
+  });
+  await db.execute({
+    sql: `INSERT INTO sessions (id, created_at, updated_at) VALUES (?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET updated_at=excluded.updated_at`,
+    args: [sessionId, now, now],
   });
 }
 
-export async function resetCard(cardId: string) {
+export async function resetCard(sessionId: string, cardId: string) {
   const db = await ensureReady();
   await db.execute({
-    sql: "UPDATE cards SET ef=2.5, interval=0, reps=0, next_review='1970-01-01', last_review='' WHERE id=?",
-    args: [cardId],
+    sql: 'DELETE FROM card_progress WHERE session_id = ? AND card_id = ?',
+    args: [sessionId, cardId],
   });
 }
 
-export async function resetAllCards() {
+export async function resetAllCards(sessionId: string) {
   const db = await ensureReady();
-  await db.execute(
-    "UPDATE cards SET ef=2.5, interval=0, reps=0, next_review='1970-01-01', last_review=''"
-  );
+  await db.execute({
+    sql: 'DELETE FROM card_progress WHERE session_id = ?',
+    args: [sessionId],
+  });
 }
 
 export async function getBrowseTopics() {
@@ -177,78 +238,15 @@ export async function getBrowseTopics() {
   return loadTopics();
 }
 
-export async function exportSession(sessionId: string) {
-  const db = await ensureReady();
-  const now = new Date().toISOString();
-
-  await db.execute({
-    sql: 'INSERT OR IGNORE INTO sessions (id, created_at, updated_at) VALUES (?, ?, ?)',
-    args: [sessionId, now, now],
-  });
-
-  const res = await db.execute('SELECT * FROM cards');
-  const cards = res.rows.map((r) => ({
-    id: r.id as string,
-    topic: r.topic as string,
-    title: r.title as string,
-    content: r.content as string,
-    ef: r.ef as number,
-    interval: r.interval as number,
-    reps: r.reps as number,
-    next_review: r.next_review as string,
-    last_review: r.last_review as string,
-  }));
-
-  await db.execute({
-    sql: 'UPDATE sessions SET updated_at = ? WHERE id = ?',
-    args: [now, sessionId],
-  });
-
-  return cards;
-}
-
-export async function importSession(sessionId: string) {
+export async function getStreakData(sessionId: string) {
   const db = await ensureReady();
   const res = await db.execute({
-    sql: 'SELECT * FROM cards WHERE session_id = ?',
+    sql: `SELECT date(reviewed_at) as day, COUNT(*) as count
+     FROM review_log
+     WHERE session_id = ? AND reviewed_at >= date('now', '-90 days')
+     GROUP BY day ORDER BY day`,
     args: [sessionId],
   });
-
-  return res.rows.map((r) => ({
-    id: r.id as string,
-    ef: r.ef as number,
-    interval: r.interval as number,
-    reps: r.reps as number,
-    next_review: r.next_review as string,
-    last_review: r.last_review as string,
-  }));
-}
-
-export async function mergeSessionState(sessionId: string, cards: Array<{ id: string; ef: number; interval: number; reps: number; next_review: string; last_review: string }>) {
-  const db = await ensureReady();
-  const now = new Date().toISOString();
-
-  for (const c of cards) {
-    await db.execute({
-      sql: 'UPDATE cards SET ef=?, interval=?, reps=?, next_review=?, last_review=?, session_id=? WHERE id=?',
-      args: [c.ef, c.interval, c.reps, c.next_review, c.last_review, sessionId, c.id],
-    });
-  }
-
-  await db.execute({
-    sql: 'INSERT OR IGNORE INTO sessions (id, created_at, updated_at) VALUES (?, ?, ?)',
-    args: [sessionId, now, now],
-  });
-}
-
-export async function getStreakData() {
-  const db = await ensureReady();
-  const res = await db.execute(
-    `SELECT date(reviewed_at) as day, COUNT(*) as count
-     FROM review_log
-     WHERE reviewed_at >= date('now', '-90 days')
-     GROUP BY day ORDER BY day`
-  );
 
   const daily: Record<string, number> = {};
   for (const r of res.rows) {
@@ -272,20 +270,24 @@ export async function getStreakData() {
   return { daily, streak, total, maxCount };
 }
 
-export async function getMatureCards(page: number, limit: number) {
+export async function getMatureCards(sessionId: string, page: number, limit: number) {
   const db = await ensureReady();
   const offset = (page - 1) * limit;
 
   const [countRes, cardsRes] = await Promise.all([
-    db.execute('SELECT COUNT(*) as c FROM cards WHERE reps >= 2 AND interval > 7'),
     db.execute({
-      sql: `SELECT c.id, c.topic, c.title, c.content, c.ef, c.interval, c.reps,
-        (SELECT COUNT(*) FROM review_log WHERE card_id = c.id) as review_count
-        FROM cards c
-        WHERE reps >= 2 AND interval > 7
-        ORDER BY c.interval DESC
+      sql: 'SELECT COUNT(*) as c FROM card_progress WHERE session_id = ? AND reps >= 2 AND interval > 7',
+      args: [sessionId],
+    }),
+    db.execute({
+      sql: `SELECT c.id, c.topic, c.title, c.content, p.ef, p.interval, p.reps,
+        (SELECT COUNT(*) FROM review_log WHERE session_id = ? AND card_id = c.id) as review_count
+        FROM card_progress p
+        JOIN cards c ON c.id = p.card_id
+        WHERE p.session_id = ? AND p.reps >= 2 AND p.interval > 7
+        ORDER BY p.interval DESC
         LIMIT ? OFFSET ?`,
-      args: [limit, offset],
+      args: [sessionId, sessionId, limit, offset],
     }),
   ]);
 
@@ -304,20 +306,24 @@ export async function getMatureCards(page: number, limit: number) {
   };
 }
 
-export async function getReviewedCards(page: number, limit: number) {
+export async function getReviewedCards(sessionId: string, page: number, limit: number) {
   const db = await ensureReady();
   const offset = (page - 1) * limit;
 
   const [countRes, cardsRes] = await Promise.all([
-    db.execute('SELECT COUNT(*) as c FROM cards WHERE reps >= 1 AND interval <= 7'),
     db.execute({
-      sql: `SELECT c.id, c.topic, c.title, c.content, c.ef, c.interval, c.reps,
-        (SELECT COUNT(*) FROM review_log WHERE card_id = c.id) as review_count
-        FROM cards c
-        WHERE reps >= 1 AND interval <= 7
-        ORDER BY c.interval DESC
+      sql: 'SELECT COUNT(*) as c FROM card_progress WHERE session_id = ? AND reps >= 1 AND interval <= 7',
+      args: [sessionId],
+    }),
+    db.execute({
+      sql: `SELECT c.id, c.topic, c.title, c.content, p.ef, p.interval, p.reps,
+        (SELECT COUNT(*) FROM review_log WHERE session_id = ? AND card_id = c.id) as review_count
+        FROM card_progress p
+        JOIN cards c ON c.id = p.card_id
+        WHERE p.session_id = ? AND p.reps >= 1 AND p.interval <= 7
+        ORDER BY p.interval DESC
         LIMIT ? OFFSET ?`,
-      args: [limit, offset],
+      args: [sessionId, sessionId, limit, offset],
     }),
   ]);
 
@@ -336,33 +342,37 @@ export async function getReviewedCards(page: number, limit: number) {
   };
 }
 
-export async function getCardDistribution() {
+export async function getCardDistribution(sessionId: string) {
   const db = await ensureReady();
 
   const states = [
-    { key: "new", label: "New", sql: "reps = 0", color: "#1c1c1c" },
     { key: "learning", label: "Learning", sql: "reps = 1", color: "#196c2e" },
     { key: "reviewing", label: "Reviewing", sql: "reps >= 2 AND interval <= 7", color: "#2ea043" },
     { key: "mature", label: "Mature", sql: "reps >= 2 AND interval > 7", color: "#3fb950" },
   ];
 
-  const byState = [];
-  for (const s of states) {
-    const res = await db.execute({
-      sql: `SELECT COUNT(*) as c FROM cards WHERE ${s.sql}`,
-    });
-    byState.push({ ...s, count: res.rows[0].c as number });
-  }
+  const [totalRes, ...stateResults] = await Promise.all([
+    db.execute('SELECT COUNT(*) as c FROM cards'),
+    ...states.map((s) =>
+      db.execute({
+        sql: `SELECT COUNT(*) as c FROM card_progress WHERE session_id = ? AND ${s.sql}`,
+        args: [sessionId],
+      })
+    ),
+  ]);
+
+  const total = totalRes.rows[0].c as number;
+  const byState = states.map((s, i) => ({ ...s, count: stateResults[i].rows[0].c as number }));
+  const newCount = total - byState.reduce((sum, s) => sum + s.count, 0);
+  byState.unshift({ key: "new", label: "New", sql: "", color: "#1c1c1c", count: newCount });
 
   const topicRes = await db.execute(
     `SELECT topic, COUNT(*) as c FROM cards GROUP BY topic`
   );
   const byTopic: Record<string, number> = {};
   for (const r of topicRes.rows) {
-    byTopic[r.topic as string] = r.count as number;
+    byTopic[r.topic as string] = r.c as number;
   }
-
-  const total = byState.reduce((s, x) => s + x.count, 0);
 
   return { byState, byTopic, total };
 }

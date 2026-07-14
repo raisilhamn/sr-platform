@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { reviewCard, getStats } from '@/lib/db';
+import { getSessionId } from '@/lib/session';
 
 export const runtime = 'nodejs';
 
@@ -8,7 +9,8 @@ export async function POST(req: Request) {
   if (typeof id !== 'string' || !id || typeof rating !== 'number' || rating < 1 || rating > 4) {
     return NextResponse.json({ error: 'invalid input' }, { status: 400 });
   }
-  await reviewCard(id, rating);
-  const stats = await getStats();
+  const sessionId = await getSessionId();
+  await reviewCard(sessionId, id, rating);
+  const stats = await getStats(sessionId);
   return NextResponse.json({ stats });
 }
