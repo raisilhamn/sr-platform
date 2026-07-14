@@ -22,13 +22,16 @@ const PAGE_SIZE = 10;
 function CardListSection({
   endpoint,
   onSelect,
+  resettable,
 }: {
   endpoint: string;
   onSelect: (card: MatureCard) => void;
+  resettable?: boolean;
 }) {
   const [cards, setCards] = useState<MatureCard[] | null>(null);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
+  const [resettingId, setResettingId] = useState<string | null>(null);
   const totalPages = Math.max(Math.ceil(total / PAGE_SIZE), 1);
 
   const load = useCallback(async (p: number) => {
@@ -41,6 +44,17 @@ function CardListSection({
   useEffect(() => {
     load(page);
   }, [page, load]);
+
+  async function handleReset(id: string) {
+    setResettingId(id);
+    await fetch("/api/reset", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+    setResettingId(null);
+    load(page);
+  }
 
   return (
     <div className="mt-6">
@@ -55,19 +69,29 @@ function CardListSection({
         <>
           <div className="space-y-2">
             {cards.map((c) => (
-              <button
+              <div
                 key={c.id}
-                onClick={() => onSelect(c)}
-                className="w-full text-left border border-border rounded-lg p-4 bg-surface hover:border-foreground/30 transition-colors"
+                className="flex justify-between items-start gap-3 border border-border rounded-lg p-4 bg-surface hover:border-foreground/30 transition-colors"
               >
-                <div className="text-xs uppercase tracking-wide text-muted font-semibold">
-                  {c.topic}
-                </div>
-                <div className="font-semibold">{c.title}</div>
-                <div className="text-xs text-muted mt-1">
-                  EF: {c.ef.toFixed(1)} | Interval: {c.interval}d | Rep: {c.reps} | Reviews: {c.reviewCount}
-                </div>
-              </button>
+                <button onClick={() => onSelect(c)} className="flex-1 text-left">
+                  <div className="text-xs uppercase tracking-wide text-muted font-semibold">
+                    {c.topic}
+                  </div>
+                  <div className="font-semibold">{c.title}</div>
+                  <div className="text-xs text-muted mt-1">
+                    EF: {c.ef.toFixed(1)} | Interval: {c.interval}d | Rep: {c.reps} | Reviews: {c.reviewCount}
+                  </div>
+                </button>
+                {resettable && (
+                  <button
+                    onClick={() => handleReset(c.id)}
+                    disabled={resettingId === c.id}
+                    className="px-2.5 py-1 text-xs border border-border rounded text-muted hover:border-foreground hover:text-foreground shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Reset
+                  </button>
+                )}
+              </div>
             ))}
           </div>
 
@@ -126,6 +150,7 @@ export default function ProgressPage() {
         <TabsContent value="reviewed">
           <CardListSection
             endpoint="/api/reviewed"
+            resettable
             onSelect={(c) => {
               setSelected(c);
               setDialogOpen(true);
