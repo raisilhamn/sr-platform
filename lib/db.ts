@@ -129,6 +129,9 @@ export async function getStats() {
   };
 }
 
+// UI exposes a 1-4 rating scale, but sm2() expects the classic 0-5 SM-2 quality scale.
+const RATING_TO_QUALITY: Record<number, number> = { 1: 1, 2: 3, 3: 4, 4: 5 };
+
 export async function reviewCard(cardId: string, rating: number) {
   const db = await ensureReady();
   const { sm2 } = await import('./sm2');
@@ -138,7 +141,8 @@ export async function reviewCard(cardId: string, rating: number) {
   });
   if (!res.rows.length) return;
   const row = res.rows[0];
-  const r = sm2(row.ef as number, row.interval as number, row.reps as number, rating);
+  const quality = RATING_TO_QUALITY[rating] ?? rating;
+  const r = sm2(row.ef as number, row.interval as number, row.reps as number, quality);
   const today = new Date().toISOString().slice(0, 10);
   const next = new Date();
   next.setDate(next.getDate() + r.interval);
