@@ -309,12 +309,12 @@ export async function getReviewedCards(page: number, limit: number) {
   const offset = (page - 1) * limit;
 
   const [countRes, cardsRes] = await Promise.all([
-    db.execute('SELECT COUNT(*) as c FROM cards WHERE reps >= 2 AND interval <= 7'),
+    db.execute('SELECT COUNT(*) as c FROM cards WHERE reps >= 1 AND interval <= 7'),
     db.execute({
       sql: `SELECT c.id, c.topic, c.title, c.content, c.ef, c.interval, c.reps,
         (SELECT COUNT(*) FROM review_log WHERE card_id = c.id) as review_count
         FROM cards c
-        WHERE reps >= 2 AND interval <= 7
+        WHERE reps >= 1 AND interval <= 7
         ORDER BY c.interval DESC
         LIMIT ? OFFSET ?`,
       args: [limit, offset],
