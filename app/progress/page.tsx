@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import StreakGraph from "@/app/streak-graph";
 import Spinner from "@/app/spinner";
 import { CardDetailDialog } from "@/components/card-detail-dialog";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 type MatureCard = {
   id: string;
@@ -19,11 +20,9 @@ type MatureCard = {
 const PAGE_SIZE = 10;
 
 function CardListSection({
-  title,
   endpoint,
   onSelect,
 }: {
-  title: string;
   endpoint: string;
   onSelect: (card: MatureCard) => void;
 }) {
@@ -44,9 +43,7 @@ function CardListSection({
   }, [page, load]);
 
   return (
-    <div className="mt-10">
-      <h3 className="text-sm font-semibold text-muted mb-4">{title}</h3>
-
+    <div className="mt-6">
       {!cards ? (
         <div className="flex items-center gap-2 text-xs text-muted">
           <Spinner />
@@ -110,23 +107,32 @@ export default function ProgressPage() {
       <h2 className="text-lg font-bold mb-6">Progress</h2>
       <StreakGraph />
 
-      <CardListSection
-        title="Mature Cards"
-        endpoint="/api/mature"
-        onSelect={(c) => {
-          setSelected(c);
-          setDialogOpen(true);
-        }}
-      />
+      <Tabs defaultValue="mature" className="mt-10">
+        <TabsList variant="line">
+          <TabsTrigger value="mature">Mature Cards</TabsTrigger>
+          <TabsTrigger value="reviewed">Reviewed Cards</TabsTrigger>
+        </TabsList>
 
-      <CardListSection
-        title="Reviewed Cards"
-        endpoint="/api/reviewed"
-        onSelect={(c) => {
-          setSelected(c);
-          setDialogOpen(true);
-        }}
-      />
+        <TabsContent value="mature">
+          <CardListSection
+            endpoint="/api/mature"
+            onSelect={(c) => {
+              setSelected(c);
+              setDialogOpen(true);
+            }}
+          />
+        </TabsContent>
+
+        <TabsContent value="reviewed">
+          <CardListSection
+            endpoint="/api/reviewed"
+            onSelect={(c) => {
+              setSelected(c);
+              setDialogOpen(true);
+            }}
+          />
+        </TabsContent>
+      </Tabs>
 
       <CardDetailDialog
         card={selected}
