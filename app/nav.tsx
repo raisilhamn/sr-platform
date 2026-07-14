@@ -23,13 +23,13 @@ export default function Nav() {
 
   return (
     <header className="sticky top-0 z-10 border-b border-border bg-surface">
-      <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
-        <h1 className="text-base font-bold tracking-tight">CPNS</h1>
-        <div className="flex items-center gap-3">
-          <nav className="flex gap-2">
+      <div className="max-w-2xl mx-auto px-3 sm:px-4 py-2.5 sm:py-3 flex items-center justify-between gap-1.5 sm:gap-3">
+        <h1 className="text-sm sm:text-base font-bold tracking-tight shrink-0">CPNS</h1>
+        <div className="flex items-center gap-1.5 sm:gap-3 min-w-0">
+          <nav className="flex gap-1 sm:gap-2 min-w-0">
             <Link
               href="/"
-              className={`px-3 py-1.5 rounded border text-sm ${
+              className={`px-2 sm:px-3 py-1 sm:py-1.5 rounded border text-xs sm:text-sm whitespace-nowrap ${
                 pathname === "/"
                   ? "bg-foreground text-background border-foreground"
                   : "border-border text-muted"
@@ -39,7 +39,7 @@ export default function Nav() {
             </Link>
             <Link
               href="/progress"
-              className={`px-3 py-1.5 rounded border text-sm ${
+              className={`px-2 sm:px-3 py-1 sm:py-1.5 rounded border text-xs sm:text-sm whitespace-nowrap ${
                 pathname === "/progress"
                   ? "bg-foreground text-background border-foreground"
                   : "border-border text-muted"
@@ -49,7 +49,7 @@ export default function Nav() {
             </Link>
             <Link
               href="/browse"
-              className={`px-3 py-1.5 rounded border text-sm ${
+              className={`px-2 sm:px-3 py-1 sm:py-1.5 rounded border text-xs sm:text-sm whitespace-nowrap ${
                 pathname === "/browse"
                   ? "bg-foreground text-background border-foreground"
                   : "border-border text-muted"
@@ -58,11 +58,11 @@ export default function Nav() {
               Browse
             </Link>
           </nav>
-          
-          <div className="relative" ref={menuRef}>
-            <button 
+
+          <div className="relative shrink-0" ref={menuRef}>
+            <button
               onClick={() => setMenuOpen(!menuOpen)}
-              className="p-2 border border-border rounded text-muted hover:text-foreground hover:border-foreground"
+              className="p-1.5 sm:p-2 border border-border rounded text-muted hover:text-foreground hover:border-foreground"
               title="Settings"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
