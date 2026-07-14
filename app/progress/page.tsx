@@ -59,7 +59,7 @@ function CardListSection({
   return (
     <div className="mt-6">
       {!cards ? (
-        <div className="flex items-center gap-2 text-xs text-muted">
+        <div className="flex items-center justify-center gap-2 text-xs text-muted py-10">
           <Spinner />
           <span>Loading...</span>
         </div>

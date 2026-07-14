@@ -34,7 +34,7 @@ export function CardDetailDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-xl max-h-[85vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-xl max-h-[85vh] overflow-y-auto p-6">
         <DialogHeader>
           <div className="text-xs uppercase tracking-wide text-muted font-semibold">
             {card.topic}
@@ -47,7 +47,7 @@ export function CardDetailDialog({
             <span>Reviews: {card.reviewCount}</span>
           </DialogDescription>
         </DialogHeader>
-        <div className="prose-card border-t border-border pt-5">
+        <div className="prose-card border-t border-border pt-6">
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{card.content}</ReactMarkdown>
         </div>
       </DialogContent>
