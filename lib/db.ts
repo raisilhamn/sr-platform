@@ -124,6 +124,11 @@ export function loadTopics(): Record<string, string> {
   return readTopicMarkdown();
 }
 
+export async function syncFromContent(): Promise<void> {
+  const db = await ensureReady();
+  await syncCards(db);
+}
+
 export async function getDueCards(sessionId: string) {
   const db = await ensureReady();
   const today = new Date().toISOString().slice(0, 10);

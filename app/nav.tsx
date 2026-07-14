@@ -57,6 +57,16 @@ export default function Nav() {
             >
               Browse
             </Link>
+            <Link
+              href="/edit"
+              className={`px-2 sm:px-3 py-1 sm:py-1.5 rounded border text-xs sm:text-sm whitespace-nowrap ${
+                pathname === "/edit"
+                  ? "bg-foreground text-background border-foreground"
+                  : "border-border text-muted"
+              }`}
+            >
+              Edit
+            </Link>
           </nav>
 
           <div className="relative shrink-0" ref={menuRef}>
